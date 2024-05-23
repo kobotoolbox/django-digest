@@ -12,7 +12,7 @@ import python_digest
 from python_digest.utils import parse_parts
 
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.http import HttpRequest
 from django.utils.functional import LazyObject
@@ -24,6 +24,9 @@ from django_digest.middleware import HttpDigestMiddleware
 from django_digest.models import PartialDigest
 from django_digest.utils import get_setting, get_backend, DEFAULT_REALM
 import six
+
+User = get_user_model()  # noqa
+
 
 @contextmanager
 def patch(namespace, **values):
