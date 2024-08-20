@@ -2,14 +2,13 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 import logging
 
+from datetime import datetime
+from django.db import IntegrityError, connection, transaction
+from django_digest.models import PartialDigest
+
 _l = logging.getLogger(__name__)
 _l.setLevel(logging.DEBUG)
 
-from datetime import datetime
-
-from django.db import IntegrityError, connection, transaction
-
-from django_digest.models import PartialDigest
 
 class AccountStorage(object):
     GET_PARTIAL_DIGEST_QUERY = """
@@ -34,14 +33,19 @@ class AccountStorage(object):
     def get_user(self, username):
         # In MySQL, string comparison is case-insensitive by default.
         # Therefore a second round of filtering is required.
-        pds = [pd
-               for pd in PartialDigest.objects.filter(login=username,
-                                                      user__is_active=True)
-               if pd.login == username]
+        pds = [
+            pd
+            for pd in PartialDigest.objects.filter(
+                login=username, user__is_active=True
+            )
+            if pd.login == username
+        ]
         if len(pds) == 0:
             return None
         if len(pds) > 1:
-            _l.warning("Multiple partial digests found for the login %r" % username)
+            _l.warning(
+                "Multiple partial digests found for the login %r" % username
+            )
             return None
         return pds[0].user
 
