@@ -21,7 +21,7 @@ from django_digest import HttpDigestAuthenticator
 from django_digest.backend.storage import AccountStorage
 from django_digest.decorators import httpdigest
 from django_digest.middleware import HttpDigestMiddleware
-from django_digest.models import PartialDigest
+from django_digest.models import PartialDigest, _store_partial_digests
 from django_digest.utils import get_setting, get_backend, DEFAULT_REALM
 
 User = get_user_model()  # noqa
@@ -417,6 +417,7 @@ class DummyLoginFactory(object):
     def unconfirmed_logins_for_user(self, user):
         return self.unconfirmed_logins
 
+
 class ModelsTests(TestCase):
 
     def setUp(self):
@@ -465,7 +466,6 @@ class ModelsTests(TestCase):
             self.assertEqual(
                 email_pd,
                 PartialDigest.objects.get(login='email@example.com').partial_digest)
-
 
     def test_partial_digest_creation_on_set_password(self):
         PartialDigest.objects.all().delete()
@@ -694,3 +694,23 @@ class DbBackendTests(TestCase):
             partial_digest='foo',
         )
         self.assertEqual(AccountStorage().get_user(user.username), user)
+
+    def test_identical_login_for_different_user(self):
+        user = User.objects.create_user(
+            username='user', email='user@example.com', password='pass'
+        )
+
+        self.assertEqual(AccountStorage().get_user('user@example.com'), user)
+
+        user_2 = User.objects.create_user(
+            username='user_2', email='user@example.com', password='pass'
+        )
+
+        self.assertEqual(AccountStorage().get_user('user@example.com'), user_2)
+        self.assertTrue(
+            PartialDigest.objects.filter(
+                login='user@example.com',
+                confirmed=True,
+            ).count()
+            == 1
+        )
