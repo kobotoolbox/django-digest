@@ -1,21 +1,21 @@
-from __future__ import with_statement
 from __future__ import absolute_import
 from __future__ import unicode_literals
-from django.test import TestCase
-
-from contextlib import contextmanager
-import time
-
-from unittest.mock import Mock
+from __future__ import with_statement
 
 import python_digest
-from python_digest.utils import parse_parts
-
+import six
+import time
+import pytest
+from contextlib import contextmanager
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.utils import IntegrityError
 from django.http import HttpRequest
+from django.test import TestCase
 from django.utils.functional import LazyObject
+from python_digest.utils import parse_parts
+from unittest.mock import Mock
 
 from django_digest import HttpDigestAuthenticator
 from django_digest.backend.storage import AccountStorage
@@ -23,7 +23,6 @@ from django_digest.decorators import httpdigest
 from django_digest.middleware import HttpDigestMiddleware
 from django_digest.models import PartialDigest
 from django_digest.utils import get_setting, get_backend, DEFAULT_REALM
-import six
 
 User = get_user_model()  # noqa
 
@@ -320,6 +319,7 @@ class DjangoDigestTests(SettingsMixin, MockRequestMixin, TestCase):
             transaction.get_connection().needs_rollback = True
         self.assertTrue(authenticator.authenticate(third_request))
 
+
 class DigestAuthenticateTests(SettingsMixin, MockRequestMixin, TestCase):
     def test_authenticate_invalid(self):
         testuser = User.objects.create_user(username='testuser',
@@ -484,24 +484,38 @@ class ModelsTests(TestCase):
 
     def test_partial_digest_update_after_email_case_change(self):
         PartialDigest.objects.all().delete()
-        user = User.objects.create(username='TestUser', email='TestUser@example.com')
+        user = User.objects.create(
+            username='TestUser', email='TestUser@example.com'
+        )
         user.set_password('password')
         user.save()
-        expected = ['testuser', 'TestUser', 'TestUser@example.com',
-                    'testuser@example.com']
-
+        expected = [
+            'TestUser',
+            'testuser',
+            'TestUser@example.com',
+            'testuser@example.com',
+        ]
         self.assertEqual(
-            set(expected),
-            set([pd.login for pd in PartialDigest.objects.all()]))
+            set(expected), set([pd.login for pd in PartialDigest.objects.all()])
+        )
         user.email = 'tESTuSER@example.com'
         user.save()
         from django.contrib.auth import authenticate
-        self.assertEqual(user,
-                         authenticate(username='TestUser', password='password'))
+
         self.assertEqual(
-            set(['testuser', 'TestUser', 'testuser@example.com',
-                 'tESTuSER@example.com']),
-            set([pd.login for pd in PartialDigest.objects.all()]))
+            user, authenticate(username='TestUser', password='password')
+        )
+        self.assertEqual(
+            set(
+                [
+                    'TestUser',
+                    'testuser',
+                    'tESTuSER@example.com',
+                    'testuser@example.com',
+                ]
+            ),
+            set([pd.login for pd in PartialDigest.objects.all()]),
+        )
 
     def test_partial_digest_creation_on_login(self):
         user = User.objects.create_user(username='TestUser', password='password',
@@ -605,6 +619,7 @@ class MiddlewareTests(SettingsMixin, TestCase):
             HttpDigestMiddleware(authenticator=authenticator).process_response(
                 request, response))
 
+
 class DbBackendTests(TestCase):
 
     def setUp(self):
@@ -656,10 +671,26 @@ class DbBackendTests(TestCase):
         self.assertEqual(user2, AccountStorage().get_user(user2.username))
         self.assertEqual(None, AccountStorage().get_user('user3'))
 
-    def test_multiple_partial_digests(self):
-        user = User.objects.create_user(username='user',
-                                        email='user@example.com',
-                                        password='pass')
-        PartialDigest.objects.create(user=user, login=user.username,
-                                     confirmed=True, partial_digest='foo')
-        self.assertEqual(AccountStorage().get_user(user.username), None)
+    def test_multiple_partial_digests_with_confirmed_logins(self):
+        user = User.objects.create_user(
+            username='user', email='user@example.com', password='pass'
+        )
+        with pytest.raises(IntegrityError):
+            PartialDigest.objects.create(
+                user=user,
+                login=user.username,
+                confirmed=True,
+                partial_digest='foo',
+            )
+
+    def test_multiple_partial_digests_with_unconfirmed_logins(self):
+        user = User.objects.create_user(
+            username='user', email='user@example.com', password='pass'
+        )
+        PartialDigest.objects.create(
+            user=user,
+            login=user.username,
+            confirmed=False,
+            partial_digest='foo',
+        )
+        self.assertEqual(AccountStorage().get_user(user.username), user)
