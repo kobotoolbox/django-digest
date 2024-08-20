@@ -4,6 +4,7 @@ import django
 from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.db.models.constraints import UniqueConstraint
 from django.db.models.signals import post_save
 from django_digest.utils import get_backend, get_setting, DEFAULT_REALM
 from python_digest import calculate_partial_digest
@@ -32,6 +33,14 @@ class PartialDigest(models.Model):
     class Meta(object):
         app_label = 'django_digest'
 
+        # unique constraint could be only on `login` but django_request leaves
+        # the door open for custom classes that implement unconfirmed logins
+        constraints = [
+            UniqueConstraint(
+                fields=['login', 'confirmed'], name='unique_login_with_confirm'
+            ),
+        ]
+
 
 _postponed_partial_digests = {}
 
@@ -56,16 +65,22 @@ def _unconfirmed_logins(user):
 
 
 def _store_partial_digests(user):
-    PartialDigest.objects.filter(user=user).delete()
+    partial_digests = []
     for login, partial_digest, confirmed in _postponed_partial_digests[
         user.password
     ]:
-        PartialDigest.objects.create(
+        partial_digests.append(PartialDigest(
             user=user,
             login=login,
             confirmed=confirmed,
             partial_digest=partial_digest,
-        )
+        ))
+    PartialDigest.objects.bulk_create(
+        partial_digests,
+        update_conflicts=True,
+        update_fields=['partial_digest'],
+        unique_fields=['login', 'confirmed'],
+    )
 
 
 def _prepare_partial_digests(user, raw_password):
