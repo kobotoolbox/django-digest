@@ -33,7 +33,7 @@ class PartialDigest(models.Model):
     class Meta(object):
         app_label = 'django_digest'
 
-        # unique constraint could be only on `login` but django_request leaves
+        # unique constraint could be only on `login` but django_digest leaves
         # the door open for custom classes that implement unconfirmed logins
         constraints = [
             UniqueConstraint(
@@ -88,7 +88,7 @@ def _store_partial_digests(user):
         PartialDigest.objects.bulk_create(
             partial_digests,
             update_conflicts=True,
-            update_fields=['partial_digest'],
+            update_fields=['partial_digest', 'user'],
             unique_fields=['login', 'confirmed'],
         )
 
