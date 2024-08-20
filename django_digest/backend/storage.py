@@ -37,16 +37,16 @@ class AccountStorage(object):
             pd
             for pd in PartialDigest.objects.filter(
                 login=username, user__is_active=True
-            )
+            ).order_by('-id')
             if pd.login == username
         ]
         if len(pds) == 0:
             return None
         if len(pds) > 1:
+            # Only log the warning
             _l.warning(
                 "Multiple partial digests found for the login %r" % username
             )
-            return None
         return pds[0].user
 
 
