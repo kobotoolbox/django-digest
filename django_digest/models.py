@@ -3,12 +3,12 @@ from __future__ import absolute_import, unicode_literals
 import django
 from django.contrib.auth.backends import ModelBackend
 from django.contrib.auth import get_user_model
-from django.db import models
+from django.db import models, transaction
 from django.db.models.constraints import UniqueConstraint
 from django.db.models.signals import post_save
 from django_digest.utils import get_backend, get_setting, DEFAULT_REALM
 from python_digest import calculate_partial_digest
-
+from . import NoEmailLoginFactory
 
 User = get_user_model()
 
@@ -66,21 +66,31 @@ def _unconfirmed_logins(user):
 
 def _store_partial_digests(user):
     partial_digests = []
-    for login, partial_digest, confirmed in _postponed_partial_digests[
-        user.password
-    ]:
-        partial_digests.append(PartialDigest(
-            user=user,
-            login=login,
-            confirmed=confirmed,
-            partial_digest=partial_digest,
-        ))
-    PartialDigest.objects.bulk_create(
-        partial_digests,
-        update_conflicts=True,
-        update_fields=['partial_digest'],
-        unique_fields=['login', 'confirmed'],
+    login_factory = get_backend(
+        'DIGEST_LOGIN_FACTORY', 'django_digest.DefaultLoginFactory'
     )
+
+    with transaction.atomic():
+        if not isinstance(login_factory, NoEmailLoginFactory):
+            # Clean up old e-mail entries. E-mail could be the same but with
+            # a different case. Username should never be edited.
+            PartialDigest.objects.filter(user=user).delete()
+
+        for login, partial_digest, confirmed in _postponed_partial_digests[
+            user.password
+        ]:
+            partial_digests.append(PartialDigest(
+                user=user,
+                login=login,
+                confirmed=confirmed,
+                partial_digest=partial_digest,
+            ))
+        PartialDigest.objects.bulk_create(
+            partial_digests,
+            update_conflicts=True,
+            update_fields=['partial_digest'],
+            unique_fields=['login', 'confirmed'],
+        )
 
 
 def _prepare_partial_digests(user, raw_password):
