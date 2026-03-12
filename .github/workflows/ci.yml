@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} / Django ${{ matrix.django-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+        django-version: ["4.2", "5.2"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            "django~=${{ matrix.django-version }}" \
+            pytest \
+            pytest-django \
+            decorator \
+            six
+          # The PyPI release of python-digest (1.7) is Python 2 only.
+          # Use the Dimagi fork which supports Python 3.
+          pip install git+https://github.com/dimagi/python-digest.git
+          pip install -e .
+
+      - name: Run tests
+        env:
+          DJANGO_SETTINGS_MODULE: django_digest.testsettings
+        run: pytest django_digest/tests.py -v
