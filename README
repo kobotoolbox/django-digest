@@ -40,3 +40,17 @@ DIGEST_NONCE_BACKEND ('django_digest.backend.db.NonceStorage')
 	  account backend's get_user method) if update_existing_nonce returns False. If the
 	  nonce-count is not being enforced, nonce_count will be None. This method should return
 	  True if the nonce is not already associated with any user.
+
+## Running the tests
+
+Install the dependencies (requires a Python 3 environment):
+
+    pip install django pytest pytest-django decorator python-digest six
+    pip install git+https://github.com/dimagi/python-digest.git
+
+Note: the PyPI release of `python-digest` (1.7) is Python 2 only. Use the
+Dimagi fork above, which is compatible with Python 3.
+
+Then run the test suite:
+
+    DJANGO_SETTINGS_MODULE=django_digest.testsettings pytest django_digest/tests.py
